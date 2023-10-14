@@ -32,20 +32,19 @@ device = torch.device(f'cuda:{args.device}')
 torch.manual_seed(42)
 
 # %%
-BASEDIR = '../rsna-2023-abdominal-trauma-detection'
+BASEDIR = '/home/pranav/remote/xizheng/'
 
 TRAIN_IMG_PATH = os.path.join(BASEDIR, 'train_images')
-TRAIN_META_PATH = os.path.join(BASEDIR, 'train_series_meta.csv')
-TEST_IMG_PATH = os.path.join(BASEDIR, 'test_images')
-TEST_META_PATH = os.path.join(BASEDIR, 'test_series_meta.csv')
-
-TRAIN_LABEL_PATH = os.path.join(BASEDIR, 'train.csv')
+# TRAIN_META_PATH = os.path.join(BASEDIR, 'train_series_meta.csv')
+# TEST_IMG_PATH = os.path.join(BASEDIR, 'test_images')
+# TEST_META_PATH = os.path.join(BASEDIR, 'test_series_meta.csv')
+TRAIN_LABEL_PATH = os.path.join('./', 'train.csv')
 
 # %%
 def fetch_img_paths_png():
     img_paths = []
     
-    ppp = '../rsna-2023-png/train_images/'
+    ppp = TRAIN_IMG_PATH
     # ppp = '/kaggle/input/rsna-abdominal-trauma-detection-png-pt1'
     
     all_pngs = sorted(os.listdir(ppp))
@@ -142,12 +141,17 @@ class AbdominalData(Dataset):
         self.max_channel = max_channel
                 
         df = pd.read_csv(df_path, index_col='patient_id')
+        
+        # balance dataset
+        injured = df[df['any_injuries'] == 1]
+        not_injured = df[df['any_injuries'] == 0]
+        print(len(injured), len(not_injured))
+        exit()
+
+        
         self.df_dict = df.to_dict(orient='index')
         for key, value in self.df_dict.items():
             self.df_dict[key] = list(value.values())
-            
-        df_meta = pd.read_csv(TRAIN_META_PATH)
-        df_meta['ps'] = df_meta['patient_id'].astype(str) + "_" + df_meta['series_id'].astype(str)
 
         
     def __len__(self):
@@ -206,35 +210,11 @@ train_data, val_data, _ = random_split(data, [train_size, val_size, unused_size]
 # print(len(train_data), len(val_data), len(_))
 
 
-train_dataloader = DataLoader(train_data, batch_size = BATCH_SIZE, shuffle = True, num_workers = 32)
-val_dataloader = DataLoader(val_data, batch_size = BATCH_SIZE, shuffle = False, num_workers = 32)
+train_dataloader = DataLoader(train_data, batch_size = BATCH_SIZE, shuffle = True, num_workers = 8)
+val_dataloader = DataLoader(val_data, batch_size = BATCH_SIZE, shuffle = False, num_workers = 8)
 
 # %%
-# train_dataloader = next(iter(train_dataloader))
-# print(train_dataloader[0].shape)
-# y = train_dataloader[1]
-# for k in y:
-#     y[k] = torch.stack(y[k]).transpose(0, 1)
-# y
-# from IPython.display import clear_output, display
-# import time
-# import matplotlib.pyplot as plt
-
-# print(data[1620])
-# l = data[1620][0].shape[0]
-# for i, img in enumerate(data[1620][0]):    
-#     plt.figure(figsize=(5, 5))
-#     plt.imshow(img, cmap="gray")
-#     plt.title(f"Frame {i}/{l}")
-#     plt.axis(False)
-#     plt.show()
-#     clear_output(wait=True)
-#     time.sleep(0.01)
-
-# %%
-from train_test_utils import create_writer
 from RSNA_model import RSNA_model
-
 
 unet = RSNA_model().to(device)
 optimizer = torch.optim.SGD(unet.parameters(), lr=args.lr)
