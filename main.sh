@@ -1,0 +1,1 @@
+python unet_train.py --batch_size 16 --epochs 5 --lr 1e-2 --device 2 --subset 0.01 &
