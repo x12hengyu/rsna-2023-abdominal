@@ -311,7 +311,7 @@ class RSNA_model(nn.Module):
                 )
         self.conv_blocks = nn.Sequential(self.block_1, self.block_2)
 
-        self.vit = VisionTransformer(image_size = 32, patch_size = 4, num_layers = 12, num_heads = 4,
+        self.vit = VisionTransformer(image_size = 32, patch_size = 4, num_layers = 4, num_heads = 4,
                                               hidden_dim = 256, mlp_dim = 1024)  # [64, 256]
 
         self.flatten = nn.Flatten(1)  # [16384]

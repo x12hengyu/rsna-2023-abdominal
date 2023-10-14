@@ -1,0 +1,33 @@
+name: rsna
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - pip
+  - pip:
+    - accelerate
+    - configargparse
+    - requests
+    - matplotlib
+    - seaborn
+    - tqdm
+    - ipykernel
+    - tensorboard
+    - torch
+    - torchvision
+    - opencv-python
+    - scikit-learn
+    - scikit-image
+    - scikit-video
+    - scipy
+    - wandb
+    - pydicom
+    # - cupy-cuda12x
+    # - geopandas
+    # - gdown
+    # - h5py
+    # - cmapy
+

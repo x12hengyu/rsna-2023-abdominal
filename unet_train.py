@@ -142,14 +142,38 @@ class AbdominalData(Dataset):
                 
         df = pd.read_csv(df_path, index_col='patient_id')
         
-        # balance dataset
-        injured = df[df['any_injuries'] == 1]
-        not_injured = df[df['any_injuries'] == 0]
-        print(len(injured), len(not_injured))
-        exit()
-
+        ########## balance dataset ##########
         
-        self.df_dict = df.to_dict(orient='index')
+        injured = df[df['any_injury'] == 1]
+        not_injured = df[df['any_injury'] == 0]
+        not_injured_sample = not_injured.sample(n=len(injured), random_state=1)  
+        balanced_df = pd.concat([injured, not_injured_sample], axis=0)
+        
+        valid_patient_ids = set(balanced_df.index.astype(str))
+        injured_ids = set(injured.index.astype(str))
+        
+        valid_img_paths = []
+
+        num_injured, num_not_injured = 0, 0
+        # Iterate through img_paths
+        for paths in self.img_paths:
+            # Example: from '/home/pranav/remote/xizheng/train_images/10004_21057_0000.png', extract '10004'
+            patient_id = os.path.basename(paths[0]).split('_')[0]
+            
+            # Check if patient_id exists in valid_patient_ids
+            if patient_id in valid_patient_ids:
+                valid_img_paths.append(paths)
+                
+            if patient_id in injured_ids:
+                num_injured += 1
+            else:
+                num_not_injured += 1
+        
+        self.img_paths = valid_img_paths
+        
+        ########## balance dataset ends ##########
+                
+        self.df_dict = balanced_df.to_dict(orient='index')
         for key, value in self.df_dict.items():
             self.df_dict[key] = list(value.values())
 
@@ -162,7 +186,6 @@ class AbdominalData(Dataset):
         
         patient_id = int(dicom_images[0].split('/')[-1].split('_')[0])
         series_id = int(dicom_images[0].split('/')[-1].split('_')[1])
-        ps = str(patient_id) + "_" + str(series_id)
         
         images = []
         
@@ -198,17 +221,13 @@ class AbdominalData(Dataset):
 
 # %%
 data = AbdominalData()
-# train_size = int(0.8 * len(data))
-# val_size = len(data) - train_size
-# train_data, val_data = random_split(data, [train_size, val_size])
 
-ten_percent = int(args.subset * len(data))
-train_size = int(0.7 * ten_percent)
-val_size = ten_percent - train_size
-unused_size = len(data) - ten_percent
+subset_size = int(args.subset * len(data))
+train_size = int(0.5 * subset_size)
+val_size = subset_size - train_size
+unused_size = len(data) - subset_size
 train_data, val_data, _ = random_split(data, [train_size, val_size, unused_size])
 # print(len(train_data), len(val_data), len(_))
-
 
 train_dataloader = DataLoader(train_data, batch_size = BATCH_SIZE, shuffle = True, num_workers = 8)
 val_dataloader = DataLoader(val_data, batch_size = BATCH_SIZE, shuffle = False, num_workers = 8)
@@ -218,7 +237,7 @@ from RSNA_model import RSNA_model
 
 unet = RSNA_model().to(device)
 optimizer = torch.optim.SGD(unet.parameters(), lr=args.lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.95)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.99)
 
 criterion_bowel = nn.BCEWithLogitsLoss().to(device)
 criterion_extravasation = nn.BCEWithLogitsLoss().to(device)
@@ -351,10 +370,11 @@ def train(model: torch.nn.Module,
           ) -> Dict[str, List]:
 
     # Create empty results dictionary
-    results = {"train_loss": [],
-               "train_acc": [],
-               "test_loss": [],
-               "test_acc": []
+    results = {
+        "train_loss": [],
+        "train_acc": [],
+        "test_loss": [],
+        "test_acc": []
     }
 
     # Loop through training and testing steps for a number of epochs
@@ -397,6 +417,6 @@ train(unet, train_dataloader,
     device=device,
 )
 
-torch.save(obj=unet.state_dict(), f=f"./unet160_sgd_sub_{args.subset}_{args.batch_size}_{args.epochs}_{args.lr}.pth")
+torch.save(obj=unet.state_dict(), f=f"./unet_sub_{args.subset}_{args.batch_size}_{args.epochs}_{args.lr}.pth")
 
 
