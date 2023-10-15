@@ -145,35 +145,32 @@ class AbdominalData(Dataset):
         ########## balance dataset ##########
         
         injured = df[df['any_injury'] == 1]
-        not_injured = df[df['any_injury'] == 0]
-        not_injured_sample = not_injured.sample(n=len(injured), random_state=1)  
-        balanced_df = pd.concat([injured, not_injured_sample], axis=0)
-        
-        valid_patient_ids = set(balanced_df.index.astype(str))
         injured_ids = set(injured.index.astype(str))
         
-        valid_img_paths = []
+        injuried_img_paths = []
+        not_injuried_img_paths = []
 
-        num_injured, num_not_injured = 0, 0
         # Iterate through img_paths
         for paths in self.img_paths:
             # Example: from '/home/pranav/remote/xizheng/train_images/10004_21057_0000.png', extract '10004'
             patient_id = os.path.basename(paths[0]).split('_')[0]
             
             # Check if patient_id exists in valid_patient_ids
-            if patient_id in valid_patient_ids:
-                valid_img_paths.append(paths)
-                
             if patient_id in injured_ids:
-                num_injured += 1
+                injuried_img_paths.append(paths)
             else:
-                num_not_injured += 1
+                not_injuried_img_paths.append(paths)
+                
+        print("Injured Samples: ", len(injuried_img_paths), "Not injured Samples: ", len(not_injuried_img_paths))
+                
+        self.img_paths = injuried_img_paths
+        self.img_paths.extend(random.sample(not_injuried_img_paths, int(len(injuried_img_paths)//6)))
         
-        self.img_paths = valid_img_paths
+        print("Total Samples: ", len(self.img_paths))
         
         ########## balance dataset ends ##########
                 
-        self.df_dict = balanced_df.to_dict(orient='index')
+        self.df_dict = df.to_dict(orient='index')
         for key, value in self.df_dict.items():
             self.df_dict[key] = list(value.values())
 
@@ -223,11 +220,11 @@ class AbdominalData(Dataset):
 data = AbdominalData()
 
 subset_size = int(args.subset * len(data))
-train_size = int(0.5 * subset_size)
+train_size = int(0.6 * subset_size)
 val_size = subset_size - train_size
 unused_size = len(data) - subset_size
 train_data, val_data, _ = random_split(data, [train_size, val_size, unused_size])
-# print(len(train_data), len(val_data), len(_))
+print("Trains: ", len(train_data), "Vals: ", len(val_data))
 
 train_dataloader = DataLoader(train_data, batch_size = BATCH_SIZE, shuffle = True, num_workers = 8)
 val_dataloader = DataLoader(val_data, batch_size = BATCH_SIZE, shuffle = False, num_workers = 8)
@@ -237,13 +234,13 @@ from RSNA_model import RSNA_model
 
 unet = RSNA_model().to(device)
 optimizer = torch.optim.SGD(unet.parameters(), lr=args.lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.99)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.999)
 
-criterion_bowel = nn.BCEWithLogitsLoss().to(device)
-criterion_extravasation = nn.BCEWithLogitsLoss().to(device)
-criterion_kidney = nn.CrossEntropyLoss().to(device)
-criterion_liver = nn.CrossEntropyLoss().to(device)
-criterion_spleen = nn.CrossEntropyLoss().to(device)
+criterion_bowel = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0]).to(device)).to(device)
+criterion_extravasation = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 6.0]).to(device)).to(device)
+criterion_kidney = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 4.0]).to(device)).to(device)
+criterion_liver = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 4.0]).to(device)).to(device)
+criterion_spleen = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 4.0]).to(device)).to(device)
 
 # %%
 
@@ -274,8 +271,8 @@ def train_step(model: torch.nn.Module,
         y_pred = model(X)
 
         # 2. Calculate  and accumulate loss
-        loss_b = criterion_bowel(y_pred[0], y["bowel"])
-        loss_e = criterion_extravasation(y_pred[1], y["extravasation"])
+        loss_b = criterion_bowel(y_pred[0], y["bowel"].argmax(dim=1))
+        loss_e = criterion_extravasation(y_pred[1], y["extravasation"].argmax(dim=1))
         loss_k = criterion_kidney(y_pred[2], y["kidney"].argmax(dim=1))
         loss_l = criterion_liver(y_pred[3], y["liver"].argmax(dim=1))
         loss_s = criterion_spleen(y_pred[4], y["spleen"].argmax(dim=1))
@@ -335,8 +332,8 @@ def test_step(model: torch.nn.Module,
             test_pred_logits = model(X)
 
             # 2. Calculate and accumulate loss
-            loss_b = criterion_bowel(test_pred_logits[0], y["bowel"])
-            loss_e = criterion_extravasation(test_pred_logits[1], y["extravasation"])
+            loss_b = criterion_bowel(test_pred_logits[0], y["bowel"].argmax(dim=1))
+            loss_e = criterion_extravasation(test_pred_logits[1], y["extravasation"].argmax(dim=1))
             loss_k = criterion_kidney(test_pred_logits[2], y["kidney"].argmax(dim=1))
             loss_l = criterion_liver(test_pred_logits[3], y["liver"].argmax(dim=1))
             loss_s = criterion_spleen(test_pred_logits[4], y["spleen"].argmax(dim=1))
@@ -379,6 +376,7 @@ def train(model: torch.nn.Module,
 
     # Loop through training and testing steps for a number of epochs
     print("Start Training: ")
+    best_acc = 0.0
     for epoch in tqdm(range(epochs)):
         train_loss, train_acc = train_step(model=model,
                                           dataloader=train_dataloader,
@@ -388,6 +386,10 @@ def train(model: torch.nn.Module,
         test_loss, test_acc = test_step(model=model,
           dataloader=test_dataloader,
           device=device)
+        
+        if test_acc >= best_acc:
+            best_acc = test_acc
+            torch.save(model.state_dict(), f"./unet_sub_{args.subset}_{args.batch_size}_{args.epochs}_{args.lr}.pth")
 
         # Print out what's happening
         print(
@@ -417,6 +419,6 @@ train(unet, train_dataloader,
     device=device,
 )
 
-torch.save(obj=unet.state_dict(), f=f"./unet_sub_{args.subset}_{args.batch_size}_{args.epochs}_{args.lr}.pth")
+# torch.save(obj=unet.state_dict(), f=f"./unet_sub_{args.subset}_{args.batch_size}_{args.epochs}_{args.lr}.pth")
 
 

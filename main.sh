@@ -1,1 +1,1 @@
-python unet_train.py --batch_size 16 --epochs 5 --lr 5e-5 --device 3 --subset 0.5 &
+python unet_train.py --batch_size 16 --epochs 5 --lr 5e-4 --device 3 --subset 0.1 &
