@@ -164,7 +164,7 @@ class AbdominalData(Dataset):
         print("Injured Samples: ", len(injuried_img_paths), "Not injured Samples: ", len(not_injuried_img_paths))
                 
         self.img_paths = injuried_img_paths
-        self.img_paths.extend(random.sample(not_injuried_img_paths, int(len(injuried_img_paths)//6)))
+        # self.img_paths.extend(random.sample(not_injuried_img_paths, int(len(injuried_img_paths)//6)))
         
         print("Total Samples: ", len(self.img_paths))
         
